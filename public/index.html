@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Open Provenance — check if a photo has been changed</title>
-<meta name="description" content="Drop a photo to see its Content Credentials and whether they match a permanent public record. Free, no account, no crypto wallet.">
+<title>Open Provenance — check if a file has been changed</title>
+<meta name="description" content="Drop a photo, video, audio file or document to see its Content Credentials and whether they match a permanent public record. Free, no account, no crypto wallet.">
 <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
@@ -30,15 +30,15 @@
 <!-- ======================= CHECK ======================= -->
 <section id="check" class="panel" hidden>
   <div class="hero">
-    <h1>Has this photo been changed?</h1>
-    <p class="lead">Drop a photo to see who signed it and whether its Content Credentials match the permanent public record. <strong>Your file stays on your device</strong>: only digital fingerprints are sent.</p>
+    <h1>Has this file been changed?</h1>
+    <p class="lead">Drop a photo, video, audio file or document to see who signed it and whether its Content Credentials match the permanent public record. <strong>Your file stays on your device</strong>: only digital fingerprints are sent.</p>
   </div>
 
   <label class="drop" id="drop">
-    <input type="file" id="check-file" accept="image/jpeg,image/png,.jpg,.jpeg,.png,.c2pa">
+    <input type="file" id="check-file">
     <svg width="40" height="40" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 16V4m0 0l-4 4m4-4l4 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 15v3a2 2 0 002 2h12a2 2 0 002-2v-3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
-    <span class="drop-title">Drop a photo here, or <u>choose a file</u></span>
-    <span class="muted small">JPEG or PNG with Content Credentials, or a .c2pa file</span>
+    <span class="drop-title">Drop any file here, or <u>choose a file</u></span>
+    <span class="muted small">Photos, videos, audio, PDFs, Office documents, SVG and .c2pa files. Large videos are read in pieces on your device.</span>
   </label>
 
   <div id="check-out" aria-live="polite"></div>
@@ -71,7 +71,7 @@
 <section id="search" class="panel" hidden>
   <div class="hero">
     <h1>Find Content Credentials</h1>
-    <p class="lead">Lost the original file? If a photo carries an invisible watermark, or you know its Content Credentials ID, you can find its record here.</p>
+    <p class="lead">Lost the original file? If a photo or video carries an invisible watermark, or you know its Content Credentials ID, you can find its record here.</p>
   </div>
   <form id="lookup-form" class="card row">
     <label>Search by
@@ -99,9 +99,9 @@
     <li class="card">
       <h2><span class="num">1</span> Add files</h2>
       <label class="drop small-drop" id="pub-drop">
-        <input type="file" id="pub-files" multiple accept="image/jpeg,image/png,.jpg,.jpeg,.png,.c2pa">
-        <span class="drop-title">Drop signed photos here, or <u>choose files</u></span>
-        <span class="muted small">Files must already have Content Credentials (from your camera or editing app)</span>
+        <input type="file" id="pub-files" multiple>
+        <span class="drop-title">Drop signed files here, or <u>choose files</u></span>
+        <span class="muted small">Any file that already has Content Credentials: photos, videos, audio, documents (from your camera, editing app or publishing tool)</span>
       </label>
       <div id="pub-list"></div>
     </li>
@@ -109,10 +109,10 @@
       <h2><span class="num">2</span> Choose how to record</h2>
       <fieldset class="radios">
         <legend class="sr">Recording type</legend>
-        <label class="radio"><input type="radio" name="mode" value="public" checked><span><b>Public record <span class="tag">Recommended</span></b><span class="muted small">Anyone can look it up, even if the photo is later copied without its credentials. Uploads the Content Credentials, not the photo itself.</span></span></label>
-        <label class="radio"><input type="radio" name="mode" value="private"><span><b>Proof only</b><span class="muted small">Uploads nothing but fingerprints. You'll get a receipt file: keep it, because it's needed to check the photo later.</span></span></label>
+        <label class="radio"><input type="radio" name="mode" value="public" checked><span><b>Public record <span class="tag">Recommended</span></b><span class="muted small">Anyone can look it up, even if the file is later copied without its credentials. Uploads the Content Credentials, not the file itself.</span></span></label>
+        <label class="radio"><input type="radio" name="mode" value="private"><span><b>Proof only</b><span class="muted small">Uploads nothing but fingerprints. You'll get a receipt file: keep it, because it's needed to check the file later.</span></span></label>
       </fieldset>
-      <p id="thumb-note" class="note warn small" hidden>Some of these Content Credentials include a small preview image of the photo. In a public record, that preview becomes public permanently.</p>
+      <p id="thumb-note" class="note warn small" hidden>Some of these Content Credentials include a small preview image of the file. In a public record, that preview becomes public permanently.</p>
     </li>
     <li class="card">
       <h2><span class="num">3</span> Record</h2>
@@ -142,29 +142,30 @@
 <section id="about" class="panel" hidden>
   <div class="hero">
     <h1>How it works</h1>
-    <p class="lead">Many cameras and editing apps now attach <strong>Content Credentials</strong> to photos: a signed note saying who made the file and how it was edited. This site adds a permanent public record of those notes, so anyone can tell whether they're still the same as when they were recorded.</p>
+    <p class="lead">Many cameras and editing apps now attach <strong>Content Credentials</strong> to photos, videos, audio and documents: a signed note saying who made the file and how it was edited. This site adds a permanent public record of those notes, so anyone can tell whether they're still the same as when they were recorded.</p>
   </div>
   <div class="grid3">
-    <div class="card how"><span class="num">1</span><h2>A publisher records</h2><p>When a photo is published, its Content Credentials are recorded in a public archive that can't be edited or deleted.</p></div>
-    <div class="card how"><span class="num">2</span><h2>You check</h2><p>Drop the photo here. Your device reads its credentials and sends only their fingerprints to look them up.</p></div>
+    <div class="card how"><span class="num">1</span><h2>A publisher records</h2><p>When a file is published, its Content Credentials are recorded in a public archive that can't be edited or deleted.</p></div>
+    <div class="card how"><span class="num">2</span><h2>You check</h2><p>Drop the file here. Your device reads its credentials and sends only their fingerprints to look them up.</p></div>
     <div class="card how"><span class="num">3</span><h2>You see the history</h2><p>When it was recorded, whether anything changed since, and whether the publisher later withdrew it.</p></div>
   </div>
 
   <h2 class="faq-title">Questions</h2>
   <div class="faq">
     <details><summary>Do I need cryptocurrency or a wallet?</summary><p>No. Checking is free and needs no account. Publishers don't need crypto either: the site operator handles recording.</p></details>
-    <details><summary>Is my photo uploaded when I check it?</summary><p>No. Your browser reads the file on your device and sends only fingerprints (short codes computed from it). The photo itself never leaves your device.</p></details>
+    <details><summary>Is my file uploaded when I check it?</summary><p>No. Your browser reads the file on your device and sends only fingerprints (short codes computed from it). The file itself never leaves your device, even large videos.</p></details>
     <details><summary>What is the "public archive"?</summary><p>It's <a href="https://www.arweave.org" target="_blank" rel="noopener">Arweave</a>, a network that stores data permanently on many independent computers. Once something is recorded there, nobody (including us) can change or remove it, which is what makes the record trustworthy.</p></details>
-    <details><summary>Does "recorded" mean the photo is real?</summary><p>No. It proves who signed the credentials and that they haven't changed since a certain date. Whether the scene is genuine is still a matter of trust in the publisher.</p></details>
-    <details><summary>What if a photo isn't found?</summary><p>That doesn't make it fake. Most photos are never recorded here. Its Content Credentials can still be checked with other tools, such as <a href="https://contentcredentials.org/verify" target="_blank" rel="noopener">contentcredentials.org/verify</a>.</p></details>
-    <details><summary>Why did my photo show "No Content Credentials"?</summary><p>Social networks and messaging apps often strip them when you share a file. Try the original file, or use Search with a watermark code if the publisher added one.</p></details>
+    <details><summary>Does "recorded" mean the file is real?</summary><p>No. It proves who signed the credentials and that they haven't changed since a certain date. Whether what it shows is genuine is still a matter of trust in the publisher.</p></details>
+    <details><summary>What if a file isn't found?</summary><p>That doesn't make it fake. Most files are never recorded here. Its Content Credentials can still be checked with other tools, such as <a href="https://contentcredentials.org/verify" target="_blank" rel="noopener">contentcredentials.org/verify</a>.</p></details>
+    <details><summary>Which files work?</summary><p>Photos (JPEG, PNG, HEIC, AVIF, WebP, GIF, TIFF, DNG, JPEG XL, SVG), video (MP4, MOV), audio (MP3, WAV, M4A, FLAC), PDF, Office and OpenDocument files, EPUB, and .c2pa files. Anything else that carries Content Credentials in the standard way usually works too.</p></details>
+    <details><summary>Why did my file show "No Content Credentials"?</summary><p>Social networks and messaging apps often strip them when you share a file. Try the original file, or use Search with a watermark code if the publisher added one.</p></details>
   </div>
 </section>
 
 </main>
 
 <footer class="wrap muted small foot">
-  Open source · protocol <code>openprovenance/1</code> · Records live on Arweave. A record shows who signed and when; it doesn't prove that what a photo shows is true.
+  Open source · protocol <code>openprovenance/1</code> · Records live on Arweave. A record shows who signed and when; it doesn't prove that what a file shows is true.
 </footer>
 <script src="/app.js" type="module"></script>
 </body>

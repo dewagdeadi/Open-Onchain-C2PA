@@ -4,11 +4,22 @@
 // hard-binding hash, the signer certificate and a few human-readable details.
 // It does NOT validate signatures: run a full C2PA validator for that.
 //
-// Supported containers: JPEG (APP11), PNG (caBX), raw .c2pa / JUMBF files.
+// Containers (layouts as written by the C2PA reference SDK, c2pa-rs):
+//   JPEG APP11 · PNG caBX · GIF "C2PA_GIF" application extension · TIFF/DNG tag 0xCD41
+//   ISO BMFF uuid box (MP4, MOV, M4A, HEIC, HEIF, AVIF, 3GP) · RIFF "C2PA" chunk (WebP, WAV, AVI)
+//   ID3v2 GEOB frame (MP3, FLAC) · JPEG XL "jumb" box · PDF C2PA_Manifest attachment
+//   ZIP META-INF/content_credential.c2pa (DOCX, XLSX, PPTX, ODT, EPUB, ZIP)
+//   SVG <c2pa:manifest> · text "-----BEGIN C2PA MANIFEST-----" · raw .c2pa sidecars
+// Anything else that embeds the manifest store as one contiguous JUMBF box is found by a
+// generic scan. Files that only point to credentials online (XMP dcterms:provenance or a
+// URL manifest reference) are reported as { remote }.
 
 const td = new TextDecoder();
+const te = new TextEncoder();
 const u32 = (b, o) => ((b[o] << 24) | (b[o + 1] << 16) | (b[o + 2] << 8) | b[o + 3]) >>> 0;
 const u16 = (b, o) => (b[o] << 8) | b[o + 1];
+const u32le = (b, o) => (b[o] | (b[o + 1] << 8) | (b[o + 2] << 16) | (b[o + 3] << 24)) >>> 0;
+const u16le = (b, o) => b[o] | (b[o + 1] << 8);
 const ascii = (b, o, n) => String.fromCharCode(...b.subarray(o, o + n));
 const concat = (parts) => {
   const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
@@ -16,19 +27,33 @@ const concat = (parts) => {
   for (const p of parts) (out.set(p, o), (o += p.length));
   return out;
 };
+function indexOf(b, needle, from = 0, to = b.length) {
+  const n = typeof needle === "string" ? te.encode(needle) : needle;
+  outer: for (let i = from; i <= to - n.length; i++) {
+    if (b[i] !== n[0]) continue;
+    for (let j = 1; j < n.length; j++) if (b[i + j] !== n[j]) continue outer;
+    return i;
+  }
+  return -1;
+}
+const b64decode = (s) => Uint8Array.from(atob(s.replace(/[^A-Za-z0-9+/=]/g, "")), (c) => c.charCodeAt(0));
+async function inflate(bytes, format) {
+  const ds = new DecompressionStream(format);
+  const out = new Response(new Blob([bytes]).stream().pipeThrough(ds));
+  return new Uint8Array(await out.arrayBuffer());
+}
+const checked = (s) => (s && isC2paStore(s) ? s : null);
 
-// ---------------------------------------------------------------------------
-// Containers
-// ---------------------------------------------------------------------------
+// --- images -------------------------------------------------------------------
 
 function jpegStore(b) {
   if (b[0] !== 0xff || b[1] !== 0xd8) return null;
-  const groups = new Map(); // instance -> [{ seq, bytes }]
+  const groups = new Map(); // JPEG XT instance -> parts
   let o = 2;
   while (o + 4 <= b.length) {
     if (b[o] !== 0xff) break;
     const marker = b[o + 1];
-    if (marker === 0xd9 || marker === 0xda) break; // EOI / start of scan
+    if (marker === 0xd9 || marker === 0xda) break; // end of image / start of scan
     if (marker >= 0xd0 && marker <= 0xd7) {
       o += 2;
       continue;
@@ -38,46 +63,315 @@ function jpegStore(b) {
     if (marker === 0xeb && seg[0] === 0x4a && seg[1] === 0x50) {
       // APP11 JPEG XT: 'JP' | En(2) | Z(4) | LBox(4) TBox(4) [XLBox] | payload
       const en = u16(seg, 2);
-      const z = u32(seg, 4);
-      const lbox = u32(seg, 8);
-      const tbox = ascii(seg, 12, 4);
-      const hdr = lbox === 1 ? 16 : 8;
-      if (!groups.has(en)) groups.set(en, { tbox, parts: [] });
-      groups.get(en).parts.push({ z, first: seg.subarray(8), rest: seg.subarray(8 + hdr) });
+      const hdr = u32(seg, 8) === 1 ? 16 : 8;
+      if (!groups.has(en)) groups.set(en, { tbox: ascii(seg, 12, 4), parts: [] });
+      groups.get(en).parts.push({ z: u32(seg, 4), first: seg.subarray(8), rest: seg.subarray(8 + hdr) });
     }
     o += 2 + len;
   }
   for (const { tbox, parts } of groups.values()) {
     if (tbox !== "jumb") continue;
     parts.sort((a, c) => a.z - c.z);
-    const store = concat([parts[0].first, ...parts.slice(1).map((p) => p.rest)]);
-    if (isC2paStore(store)) return store;
+    const store = checked(concat([parts[0].first, ...parts.slice(1).map((p) => p.rest)]));
+    if (store) return store;
   }
   return null;
 }
 
 function pngStore(b) {
-  const sig = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
-  if (!sig.every((v, i) => b[i] === v)) return null;
-  let o = 8;
-  while (o + 8 <= b.length) {
+  if (ascii(b, 1, 3) !== "PNG" || b[0] !== 0x89) return null;
+  for (let o = 8; o + 8 <= b.length; ) {
     const len = u32(b, o);
     const type = ascii(b, o + 4, 4);
-    if (type === "caBX") return b.slice(o + 8, o + 8 + len);
+    if (type === "caBX") return checked(b.slice(o + 8, o + 8 + len));
     if (type === "IEND") break;
     o += 12 + len;
   }
   return null;
 }
 
-function rawStore(b) {
-  return b.length > 8 && ascii(b, 4, 4) === "jumb" && isC2paStore(b) ? b : null;
+function gifStore(b) {
+  if (ascii(b, 0, 3) !== "GIF") return null;
+  let o = 13;
+  if (b[10] & 0x80) o += 3 * (1 << ((b[10] & 7) + 1)); // global color table
+  const subBlocks = (p) => {
+    const parts = [];
+    while (p < b.length && b[p] !== 0) {
+      parts.push(b.subarray(p + 1, p + 1 + b[p]));
+      p += 1 + b[p];
+    }
+    return { data: concat(parts), next: p + 1 };
+  };
+  while (o < b.length) {
+    const intro = b[o];
+    if (intro === 0x3b) break; // trailer
+    if (intro === 0x21) {
+      const label = b[o + 1];
+      if (label === 0xff && b[o + 2] === 11 && ascii(b, o + 3, 8) === "C2PA_GIF") {
+        const { data } = subBlocks(o + 14);
+        return checked(data);
+      }
+      o = subBlocks(o + 2).next;
+    } else if (intro === 0x2c) {
+      let p = o + 10;
+      if (b[o + 9] & 0x80) p += 3 * (1 << ((b[o + 9] & 7) + 1)); // local color table
+      o = subBlocks(p + 1).next; // skip LZW minimum code size
+    } else break;
+  }
+  return null;
+}
+
+function tiffStore(b) {
+  const le = ascii(b, 0, 2) === "II";
+  if (!le && ascii(b, 0, 2) !== "MM") return null;
+  const r16 = le ? u16le : u16;
+  const r32 = le ? u32le : u32;
+  if (r16(b, 2) !== 42) return null; // BigTIFF falls through to the generic scan
+  let ifd = r32(b, 4);
+  for (let guard = 0; ifd && ifd + 2 <= b.length && guard < 64; guard++) {
+    const n = r16(b, ifd);
+    for (let i = 0; i < n; i++) {
+      const e = ifd + 2 + i * 12;
+      if (r16(b, e) === 0xcd41) {
+        const count = r32(b, e + 4);
+        const at = count <= 4 ? e + 8 : r32(b, e + 8);
+        return checked(b.slice(at, at + count));
+      }
+    }
+    ifd = r32(b, ifd + 2 + n * 12);
+  }
+  return null;
+}
+
+function riffStore(b) {
+  if (ascii(b, 0, 4) !== "RIFF") return null;
+  for (let o = 12; o + 8 <= b.length; ) {
+    const id = ascii(b, o, 4);
+    const len = u32le(b, o + 4);
+    if (id === "C2PA") return checked(b.slice(o + 8, o + 8 + len));
+    o += 8 + len + (len & 1);
+  }
+  return null;
+}
+
+// --- ISO BMFF (MP4, MOV, HEIC, AVIF ...) ----------------------------------------
+
+const C2PA_UUID = [0xd8, 0xfe, 0xc3, 0xd6, 0x1b, 0x0e, 0x48, 0x3c, 0x92, 0x97, 0x58, 0x28, 0x87, 0x7e, 0xc4, 0x81];
+
+/** Store bytes from the payload of a C2PA uuid box (after the 16-byte uuid), or null. */
+function bmffPayload(p) {
+  if (p.length < 6) return null;
+  const end = p.indexOf(0, 4);
+  if (end < 0) return null;
+  const purpose = td.decode(p.subarray(4, end));
+  if (purpose !== "manifest") return null;
+  return checked(p.slice(end + 1 + 8)); // skip the 8-byte merkle offset
+}
+
+function isBmff(b) {
+  return ["ftyp", "moov", "mdat", "free", "wide", "skip", "uuid", "styp"].includes(ascii(b, 4, 4));
+}
+
+function bmffStore(b) {
+  if (!isBmff(b)) return null;
+  for (let o = 0; o + 8 <= b.length; ) {
+    let len = u32(b, o);
+    const type = ascii(b, o + 4, 4);
+    let hdr = 8;
+    if (len === 1) {
+      len = Number((BigInt(u32(b, o + 8)) << 32n) | BigInt(u32(b, o + 12)));
+      hdr = 16;
+    } else if (len === 0) len = b.length - o;
+    if (len < hdr) break;
+    if (type === "uuid" && C2PA_UUID.every((v, i) => b[o + hdr + i] === v)) {
+      const s = bmffPayload(b.subarray(o + hdr + 16, o + len));
+      if (s) return s;
+    }
+    o += len;
+  }
+  return null;
+}
+
+// --- documents and archives -------------------------------------------------------
+
+async function zipStore(b) {
+  if (u32le(b, 0) !== 0x04034b50) return null;
+  const name = "META-INF/content_credential.c2pa";
+  // central directory
+  let eocd = -1;
+  for (let i = b.length - 22; i >= Math.max(0, b.length - 65557); i--) if (u32le(b, i) === 0x06054b50) { eocd = i; break; }
+  if (eocd < 0) return null;
+  let p = u32le(b, eocd + 16);
+  const total = u16le(b, eocd + 10);
+  for (let i = 0; i < total && u32le(b, p) === 0x02014b50; i++) {
+    const method = u16le(b, p + 10);
+    const csize = u32le(b, p + 20);
+    const nlen = u16le(b, p + 28);
+    const elen = u16le(b, p + 30);
+    const clen = u16le(b, p + 32);
+    const local = u32le(b, p + 42);
+    if (td.decode(b.subarray(p + 46, p + 46 + nlen)) === name) {
+      const start = local + 30 + u16le(b, local + 26) + u16le(b, local + 28);
+      const data = b.subarray(start, start + csize);
+      if (method === 0) return checked(data.slice());
+      if (method === 8) return checked(await inflate(data, "deflate-raw"));
+      return null;
+    }
+    p += 46 + nlen + elen + clen;
+  }
+  return null;
+}
+
+/** Byte offset of "N G obj" as a whole token (not inside "11 0 obj"). */
+function findPdfObject(b, num, gen) {
+  const needle = `${num} ${gen} obj`;
+  for (let i = indexOf(b, needle); i >= 0; i = indexOf(b, needle, i + 1)) {
+    const prev = b[i - 1];
+    if (i === 0 || prev === 0x0a || prev === 0x0d || prev === 0x20 || prev === 0x09 || prev === 0x3e) return i;
+  }
+  return -1;
+}
+
+async function pdfStore(b) {
+  if (ascii(b, 0, 5) !== "%PDF-") return null;
+  const text = td.decode(b); // byte offsets stay valid only for ASCII; we search bytes below
+  const spec = /\/AFRelationship\s*\/C2PA_Manifest/.exec(text);
+  if (!spec) return null;
+  // the Filespec dictionary around it holds /EF << /F n g R >>
+  const around = text.slice(Math.max(0, spec.index - 2000), spec.index + 2000);
+  const ef = /\/EF\s*<<[^>]*\/F\s+(\d+)\s+(\d+)\s+R/.exec(around);
+  if (!ef) return null;
+  const objAt = findPdfObject(b, ef[1], ef[2]);
+  if (objAt < 0) return null;
+  const dictEnd = indexOf(b, "stream", objAt);
+  if (dictEnd < 0) return null;
+  const dict = td.decode(b.subarray(objAt, dictEnd));
+  let dataStart = dictEnd + 6;
+  if (b[dataStart] === 0x0d) dataStart++;
+  if (b[dataStart] === 0x0a) dataStart++;
+  let length;
+  const direct = /\/Length\s+(\d+)(?!\s+\d+\s+R)/.exec(dict);
+  const indirect = /\/Length\s+(\d+)\s+(\d+)\s+R/.exec(dict);
+  if (indirect) {
+    const at = findPdfObject(b, indirect[1], indirect[2]);
+    length = at >= 0 ? Number(/obj\s*(\d+)/.exec(td.decode(b.subarray(at, at + 64)))?.[1]) : NaN;
+  } else if (direct) length = Number(direct[1]);
+  if (!Number.isFinite(length)) length = indexOf(b, "endstream", dataStart) - dataStart;
+  let data = b.slice(dataStart, dataStart + length);
+  if (/\/Filter\s*\/FlateDecode/.test(dict)) data = await inflate(data, "deflate");
+  return checked(data);
+}
+
+function textReferences(b) {
+  // only for files that look like text (SVG, XML, HTML, source code, plain text)
+  const head = b.subarray(0, 2048);
+  if (head.some((x) => x === 0)) return {};
+  const text = td.decode(b);
+  const svg = /<c2pa:manifest[^>]*>([\s\S]*?)<\/c2pa:manifest>/.exec(text);
+  if (svg) return { store: checked(b64decode(svg[1])) };
+  const begin = text.indexOf("-----BEGIN C2PA MANIFEST-----");
+  const end = begin >= 0 ? text.indexOf("-----END C2PA MANIFEST-----", begin) : -1;
+  if (end > begin) {
+    const ref = text
+      .slice(begin + "-----BEGIN C2PA MANIFEST-----".length, end)
+      .split(/\r?\n/)
+      .map((l) => l.replace(/^\s*(#|\/\/|--|%|;|\*|\/\*|<!--)\s?/, "").replace(/\s*(\*\/|-->)\s*$/, "").trim())
+      .join("")
+      .trim();
+    const DATA_URI = "data:application/c2pa;base64,";
+    if (ref.startsWith(DATA_URI)) return { store: checked(b64decode(ref.slice(DATA_URI.length))) };
+    if (/^https:\/\//.test(ref)) return { remote: ref };
+  }
+  return {};
+}
+
+// --- fallbacks ------------------------------------------------------------------
+
+/** Any contiguous JUMBF box labelled "c2pa" (MP3/FLAC ID3, JPEG XL, BigTIFF, ...). */
+function scanStore(b) {
+  for (let i = indexOf(b, "jumb", 4); i >= 4; i = indexOf(b, "jumb", i + 1)) {
+    const start = i - 4;
+    const len = u32(b, start);
+    if (len < 16 || start + len > b.length) continue;
+    const s = checked(b.slice(start, start + len));
+    if (s) return s;
+  }
+  return null;
+}
+
+function remoteReference(b) {
+  const xmp = indexOf(b, "dcterms:provenance");
+  if (xmp < 0) return null;
+  const text = td.decode(b.subarray(xmp, xmp + 2048));
+  const m = /dcterms:provenance\s*=\s*"([^"]+)"|<dcterms:provenance>([^<]+)</.exec(text);
+  const url = m && (m[1] || m[2]).trim();
+  return url && /^https:\/\//.test(url) ? url : null;
+}
+
+const FORMATS = [
+  ["C2PA manifest store", (b) => (ascii(b, 4, 4) === "jumb" ? checked(b) : null)],
+  ["JPEG", jpegStore],
+  ["PNG", pngStore],
+  ["GIF", gifStore],
+  ["TIFF", tiffStore],
+  ["RIFF (WebP, WAV, AVI)", riffStore],
+  ["ISO BMFF (MP4, MOV, HEIC, AVIF)", bmffStore],
+  ["ZIP / Office / ODF / EPUB", zipStore],
+  ["PDF", pdfStore],
+];
+
+/**
+ * Find Content Credentials in any file.
+ * @returns {Promise<{ store?: Uint8Array, remote?: string, container: string } | null>}
+ */
+export async function locateManifest(bytes) {
+  const b = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  if (b.length < 8) return null;
+  for (const [name, find] of FORMATS) {
+    const store = await find(b);
+    if (store) return { store, container: name };
+  }
+  const t = textReferences(b);
+  if (t.store) return { store: t.store, container: "Text (SVG, XML, HTML, code)" };
+  const scanned = scanStore(b);
+  if (scanned) return { store: scanned, container: "Embedded JUMBF" };
+  const remote = t.remote || remoteReference(b);
+  if (remote) return { remote, container: "Remote manifest" };
+  return null;
 }
 
 /** The C2PA manifest store bytes embedded in a file, or null. */
-export function extractManifestStore(bytes) {
-  const b = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
-  return rawStore(b) || jpegStore(b) || pngStore(b);
+export async function extractManifestStore(bytes) {
+  return (await locateManifest(bytes))?.store || null;
+}
+
+/**
+ * Large files (video) without reading everything into memory: walks ISO BMFF boxes
+ * with Blob slices; other formats are read whole up to `maxWholeBytes`.
+ */
+export async function locateManifestInBlob(blob, { maxWholeBytes = 512 * 1024 * 1024 } = {}) {
+  const read = async (o, n) => new Uint8Array(await blob.slice(o, o + n).arrayBuffer());
+  const head = await read(0, 16);
+  if (blob.size > maxWholeBytes || (isBmff(head) && blob.size > 32 * 1024 * 1024)) {
+    if (!isBmff(head)) throw new Error("File too large to read in the browser");
+    for (let o = 0; o + 8 <= blob.size; ) {
+      const h = await read(o, 32);
+      let len = u32(h, 0);
+      let hdr = 8;
+      if (len === 1) {
+        len = Number((BigInt(u32(h, 8)) << 32n) | BigInt(u32(h, 12)));
+        hdr = 16;
+      } else if (len === 0) len = blob.size - o;
+      if (len < hdr) break;
+      if (ascii(h, 4, 4) === "uuid" && C2PA_UUID.every((v, i) => h[hdr + i] === v)) {
+        const s = bmffPayload((await read(o, len)).subarray(hdr + 16));
+        if (s) return { store: s, container: "ISO BMFF (MP4, MOV, HEIC, AVIF)" };
+      }
+      o += len;
+    }
+    return null;
+  }
+  return locateManifest(await read(0, blob.size));
 }
 
 // ---------------------------------------------------------------------------
@@ -341,9 +635,18 @@ export async function readManifestStore(store) {
   };
 }
 
-/** One call for a whole file: { store, manifest } or null when it has no credentials. */
+/** One call for a whole file: { store, manifest, container }, { remote, container } or null. */
 export async function readFile(bytes) {
-  const store = extractManifestStore(bytes);
-  if (!store) return null;
-  return { store, manifest: await readManifestStore(store) };
+  return fromLocated(await locateManifest(bytes));
+}
+
+/** Same as readFile, for a File/Blob (reads large videos in pieces). */
+export async function readBlob(blob) {
+  return fromLocated(await locateManifestInBlob(blob));
+}
+
+async function fromLocated(found) {
+  if (!found) return null;
+  if (!found.store) return { remote: found.remote, container: found.container };
+  return { store: found.store, container: found.container, manifest: await readManifestStore(found.store) };
 }

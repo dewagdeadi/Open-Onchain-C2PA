@@ -31,11 +31,11 @@ for (const f of ["CA.jpg", "C.jpg", "cloud_manifest.c2pa"]) {
 
 test("files without Content Credentials return null", async () => {
   assert.equal(await readFile(fx("no_manifest.jpg")), null);
-  assert.equal(extractManifestStore(new Uint8Array([1, 2, 3])), null);
+  assert.equal(await extractManifestStore(new Uint8Array([1, 2, 3])), null);
 });
 
 test("truncated or corrupted credentials are never misread", async () => {
-  const store = extractManifestStore(fx("CA.jpg"));
+  const store = await extractManifestStore(fx("CA.jpg"));
   assert.equal(await readFile(store.slice(0, store.length >> 1)), null);
   const bad = store.slice();
   const claimAt = Buffer.from(bad).indexOf("c2pa.claim");

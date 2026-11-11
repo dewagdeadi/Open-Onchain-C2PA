@@ -116,3 +116,7 @@ pre { background: #F7F8FA; border-radius: 10px; padding: 12px; overflow: auto; f
   .tabs { flex: 1 1 100%; overflow-x: auto; flex-wrap: nowrap; }
   .tabs a { white-space: nowrap; padding: 8px 12px; }
 }
+video.preview { background: #000; }
+.preview.audio { display: flex; flex-direction: column; gap: 10px; padding: 12px; place-items: initial; justify-content: center; text-align: center; }
+.preview.audio audio { width: 100%; }
+.preview.doc { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; color: var(--accent-ink); font-weight: 600; }

@@ -1,6 +1,6 @@
 // Open Provenance front end. Plain ES modules, no build step.
 // Files are read on the user's device; only fingerprints go to the API.
-import { readFile } from "./js/c2pa-reader.mjs";
+import { readBlob } from "./js/c2pa-reader.mjs";
 
 const $ = (s, el = document) => el.querySelector(s);
 const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
@@ -112,7 +112,7 @@ function interpret(r) {
   else if (has("anchor.pending"))
     v = { tone: "info", title: "Recorded, confirmation in progress", text: "The record was just added and is being confirmed. This usually takes a few minutes, so check again shortly." };
   else
-    v = { tone: "info", title: "Not in the public archive", text: "This doesn't mean the file is fake: most files are never recorded here. Its Content Credentials can still be checked with other tools, such as <a href="https://contentcredentials.org/verify" target="_blank" rel="noopener">contentcredentials.org/verify</a>." };
+    v = { tone: "info", title: "Not in the public archive", text: `This doesn't mean the file is fake: most files are never recorded here. Its Content Credentials can still be checked with other tools, such as <a href="https://contentcredentials.org/verify" target="_blank" rel="noopener">contentcredentials.org/verify</a>.` };
   return { ...v, notes };
 }
 
@@ -126,6 +126,7 @@ function verdictHtml(r) {
 function techHtml(r, m) {
   const rows = [
     m && ["Content Credentials ID", `<code>${esc(m.urn)}</code>`],
+    m?.container && ["Found in", esc(m.container)],
     ["Record", r.anchor ? `<code>ar://${esc(r.anchor.tx)}</code>` : "—"],
     ["Archive block", r.anchor?.block ? `${esc(r.anchor.block.height)} · ${esc(fmtDate(r.anchor.block.timestamp))}` : r.anchor ? "pending" : "—"],
     ["Recorded by", r.anchor ? `<code>${esc(r.anchor.owner)}</code>` : "—"],
@@ -139,20 +140,52 @@ function techHtml(r, m) {
     .join("")}</tbody></table></div><details style="margin-top:12px"><summary>Raw response</summary><pre>${esc(JSON.stringify(r, null, 2))}</pre></details></div></details>`;
 }
 
+// ---- what kind of file is this? ---------------------------------------------------
+const ext = (name) => (name.includes(".") ? name.split(".").pop().toUpperCase() : "");
+function kindOf(file) {
+  const t = file.type;
+  const e = ext(file.name);
+  const k = t.startsWith("image/") || ["DNG", "HEIC", "HEIF", "AVIF", "JXL", "TIF", "TIFF"].includes(e) ? "Image"
+    : t.startsWith("video/") || ["MOV", "MP4", "M4V", "AVI"].includes(e) ? "Video"
+    : t.startsWith("audio/") || ["MP3", "WAV", "M4A", "FLAC"].includes(e) ? "Audio"
+    : e === "C2PA" ? "Content Credentials file"
+    : ["PDF", "DOCX", "XLSX", "PPTX", "ODT", "ODS", "ODP", "EPUB"].includes(e) ? "Document"
+    : "File";
+  return e && k !== "Content Credentials file" ? `${k} (${e})` : k;
+}
+
 // ---- check a file --------------------------------------------------------------
 let previewUrl = null;
+function previewFor(file) {
+  if (previewUrl) URL.revokeObjectURL(previewUrl);
+  previewUrl = null;
+  const t = file.type;
+  const label = `Preview of ${esc(file.name)}`;
+  if (/^(image|video|audio)\//.test(t)) previewUrl = URL.createObjectURL(file);
+  if (t.startsWith("image/") && !/tiff|heic|heif/.test(t)) return `<img class="preview" src="${previewUrl}" alt="${label}">`;
+  if (t.startsWith("video/")) return `<video class="preview" src="${previewUrl}" controls muted playsinline aria-label="${label}"></video>`;
+  if (t.startsWith("audio/")) return `<div class="preview audio"><span>${esc(file.name)}</span><audio src="${previewUrl}" controls aria-label="${label}"></audio></div>`;
+  return `<div class="preview doc"><svg width="36" height="36" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M7 3h7l5 5v13H7z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M14 3v5h5" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg><span>${esc(ext(file.name) || "FILE")}</span></div>`;
+}
 async function checkFile(file) {
   const out = $("#check-out");
-  if (previewUrl) URL.revokeObjectURL(previewUrl);
-  previewUrl = file.type.startsWith("image/") ? URL.createObjectURL(file) : null;
-  const preview = previewUrl ? `<img class="preview" src="${previewUrl}" alt="Preview of ${esc(file.name)}">` : `<div class="preview">${esc(file.name)}</div>`;
+  const preview = previewFor(file);
   out.innerHTML = `<div class="result">${card("", `<p class="muted">Reading ${esc(file.name)}…</p>`)}</div>`;
 
   let parsed;
   try {
-    parsed = await readFile(new Uint8Array(await file.arrayBuffer()));
+    parsed = await readBlob(file);
   } catch (e) {
     parsed = { error: e.message };
+  }
+
+  if (parsed?.remote) {
+    out.innerHTML = `<div class="result">${card("", `<div class="summary">${preview}<div>
+      <span class="badge good">Content Credentials stored online</span>
+      <h2 style="margin-top:10px">This file points to Content Credentials kept on another website</h2>
+      <p>Instead of carrying them inside, it links to <a href="${esc(parsed.remote)}" target="_blank" rel="noopener noreferrer">${esc(new URL(parsed.remote).host)}</a>. To check them against the public archive, download that file (it ends in .c2pa) and drop it here.</p>
+      </div></div>`)}</div>`;
+    return;
   }
 
   if (!parsed || parsed.error) {
@@ -163,14 +196,15 @@ async function checkFile(file) {
       <ul class="small">
         <li>Try the original file from the photographer or publisher.</li>
         <li>If the publisher added an invisible watermark, <a href="#search">search by its code</a>.</li>
-        <li>This page reads JPEG, PNG and .c2pa files.</li>
+        <li>Not every file type can carry them. See <a href="#about">which files work</a>.</li>
       </ul></div></div>`)}</div>`;
     return;
   }
 
-  const m = parsed.manifest;
+  const m = { ...parsed.manifest, container: parsed.container };
   const facts = [
     ["Signed by", m.signer || "Unknown signer"],
+    ["File type", kindOf(file)],
     ["Made with", m.generator || "Not stated"],
     m.title && ["Title", m.title],
     m.manifestCount > 1 && ["Edit history", `${m.manifestCount} signed steps`],
@@ -191,7 +225,7 @@ async function checkFile(file) {
         signerCertPem: m.certificatePem || undefined,
       }),
     });
-    out.innerHTML = `<div class="result">${summary}${verdictHtml(r)}<p class="disclaimer">A record shows when these Content Credentials existed and that they haven't changed. It doesn't prove that what the photo shows is true.</p>${techHtml(r, m)}</div>`;
+    out.innerHTML = `<div class="result">${summary}${verdictHtml(r)}<p class="disclaimer">A record shows when these Content Credentials existed and that they haven't changed. It doesn't prove that what the file shows is true.</p>${techHtml(r, m)}</div>`;
   } catch (e) {
     out.innerHTML = `<div class="result">${summary}${errorBlock(friendly(e))}</div>`;
   }
@@ -284,8 +318,9 @@ function renderPubList() {
 dropzone($("#pub-drop"), $("#pub-files"), async (files) => {
   for (const file of files) {
     try {
-      const parsed = await readFile(new Uint8Array(await file.arrayBuffer()));
-      pub.files.push(parsed ? { file, parsed } : { file, reason: "No Content Credentials in this file" });
+      const parsed = await readBlob(file);
+      if (parsed?.remote) pub.files.push({ file, reason: "Its credentials are stored online. Download the .c2pa file they link to and add that instead." });
+      else pub.files.push(parsed ? { file, parsed } : { file, reason: "No Content Credentials in this file" });
     } catch {
       pub.files.push({ file, reason: "Content Credentials couldn't be read" });
     }

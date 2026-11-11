@@ -10,38 +10,68 @@ C2PA validation is unchanged: a manifest stays valid with any C2PA validator whe
 | Cost | No gas. Bundler mode: small uploads free, larger paid once. Direct mode: paid once in AR per byte, no third party |
 | Signer keys | C2PA ES256 (P-256) keys sign statements directly |
 | Web app | Cloudflare Pages: static UI + Pages Functions API, no Node compatibility flag needed |
-| Tests | `npm test`: 40 tests (protocol, Web Crypto parity with Node/OpenZeppelin/arbundles/arweave-js, direct transactions, the in-browser C2PA reader on real C2PA files, Pages handlers) |
+| Tests | `npm test`: 58 tests (protocol, Web Crypto parity with Node/OpenZeppelin/arbundles/arweave-js, direct transactions, the C2PA reader across every container format, Pages handlers, front-end syntax) |
 | License | Apache-2.0 |
 
 ## Screenshots
 
-The Cloudflare Pages app, built for people who have never used crypto. You drop a photo; your browser reads its Content Credentials on your device and sends only fingerprints. Shown with the C2PA SDK's public test images, against a local Arweave simulator.
+The Cloudflare Pages app, built for people who have never used crypto. You drop any file; your browser reads its Content Credentials on your device and sends only fingerprints. Shown with the C2PA SDK's public test files, against a local Arweave simulator.
 
 **Check a file.** Who signed it, and whether its credentials match the permanent public record.
 
-![Check page: a dropped photo with its signer and app, and a green "Recorded in the public archive" result with the date](docs/screenshots/check-recorded.png)
+![Check page: a dropped photo with its signer, file type and app, and a green "Recorded in the public archive" result with the date](docs/screenshots/check-recorded.png)
+
+**Video and documents work the same way.** Large videos are read in pieces, so nothing heavy is loaded into memory.
+
+![Result for an MP4 video: video preview, signer, "Video (MP4)", recorded in the public archive](docs/screenshots/check-video.png)
+
+![Result for a signed PDF from Adobe Express: document icon, signer Adobe Inc., recorded in the public archive](docs/screenshots/check-pdf.png)
 
 **When the publisher has withdrawn it.** The record still matches, with a clear warning.
 
 ![Result card: recorded, with a warning that the publisher withdrew these Content Credentials](docs/screenshots/check-withdrawn.png)
 
-**Not recorded, or no credentials.** Plain explanations instead of error codes.
+**Not recorded, no credentials, or credentials kept online.** Plain explanations instead of error codes.
 
 ![Result: "Not in the public archive", explaining that this doesn't mean the file is fake](docs/screenshots/check-not-found.png)
 
-![Result: "No Content Credentials", with suggestions to try the original file or search by watermark](docs/screenshots/check-no-credentials.png)
+![Result: "No Content Credentials", with suggestions](docs/screenshots/check-no-credentials.png)
 
-**For publishers.** Drop signed photos, pick public record or proof only, enter the access code. Files without credentials, or too large for a public record, are flagged before anything is sent.
+![Result: the file points to Content Credentials stored on another website, with a link](docs/screenshots/check-remote.png)
 
-![Publish page: three files listed as ready or can't record, the two recording options, a preview-image notice and the access code](docs/screenshots/publish-ready.png)
+**For publishers.** Drop signed files of any type, pick public record or proof only, enter the access code. Files without credentials, or too large for a public record, are flagged before anything is sent.
 
-**How it works,** in plain language, with answers to common questions (no wallet needed, the photo is never uploaded, what "recorded" does and doesn't prove).
+![Publish page: a photo, a video, a PDF and a .c2pa file ready, one file without credentials flagged, the two recording options and the access code](docs/screenshots/publish-ready.png)
+
+**How it works,** in plain language, with answers to common questions.
 
 ![How it works page: three steps and a list of questions](docs/screenshots/how-it-works.png)
 
 <img src="docs/screenshots/mobile-check.png" alt="The check result on a phone" width="300">
 
-The reader in `public/js/c2pa-reader.mjs` handles JPEG, PNG and `.c2pa` files with no dependencies. Tests check it against the `c2pa-ts` library on the C2PA SDK's sample files. Fingerprints, ids and the full API response stay one click away under "Technical details".
+## Supported files
+
+The reader in `public/js/c2pa-reader.mjs` has no dependencies and runs in the browser, Workers and Node. It finds Content Credentials wherever the C2PA specification puts them, using the layouts of the C2PA reference SDK:
+
+| Files | Where the credentials sit |
+| --- | --- |
+| JPEG | APP11 segments, reassembled |
+| PNG | `caBX` chunk |
+| GIF | `C2PA_GIF` application extension |
+| TIFF, DNG | Tag `0xCD41` |
+| MP4, MOV, M4V, M4A, HEIC, HEIF, AVIF, 3GP | ISO BMFF `uuid` box (large videos read in pieces) |
+| WebP, WAV, AVI | RIFF `C2PA` chunk |
+| MP3, FLAC | ID3v2 `GEOB` frame |
+| JPEG XL | `jumb` box |
+| PDF | `C2PA_Manifest` attachment, compressed or not |
+| DOCX, XLSX, PPTX, ODT, EPUB, ZIP | `META-INF/content_credential.c2pa`, stored or deflated |
+| SVG | `<c2pa:manifest>` (base64) |
+| HTML, XML, source code, text | `-----BEGIN C2PA MANIFEST-----` data URI |
+| `.c2pa` | The manifest store itself |
+
+Any other file that carries the manifest store as one contiguous JUMBF box is found by a generic scan. Files that only link to credentials online (`dcterms:provenance` or a URL reference) are reported with the link.
+
+Tests check the reader against `c2pa-ts` on the SDK's signed JPEG and MP4 samples. For the other formats, real Content Credentials are embedded into unsigned sample files using each format's layout and must come back byte for byte. The reader doesn't validate signatures; it reads what a file says about itself. Fingerprints, ids and the API response stay one click away under "Technical details".
 
 ## Quick start
 

@@ -8,7 +8,7 @@
     "test": "test"
   },
   "scripts": {
-    "test": "node --test --test-reporter=spec test/protocol.test.js test/web.test.js test/direct.test.js test/reader.test.mjs test/pages.test.mjs",
+    "test": "node --test --test-reporter=spec test/protocol.test.js test/web.test.js test/direct.test.js test/reader.test.mjs test/formats.test.mjs test/pages.test.mjs test/frontend.test.mjs",
     "dev": "wrangler pages dev public",
     "dev:fake-arweave": "node scripts/dev-fake-arweave.js",
     "build": "wrangler pages functions build --outdir .wrangler/functions-check",
