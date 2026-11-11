@@ -16,7 +16,8 @@ export async function onRequest(context) {
     res = await context.next();
   } catch (e) {
     const client = e instanceof SyntaxError || /^(bad|expected|missing|invalid)/i.test(e.message);
-    res = pages.fail(client ? 400 : 502, e.message);
+    const payment = /winston/i.test(e.message); // direct mode: over the cost cap or not enough AR
+    res = pages.fail(client ? 400 : payment ? 402 : 502, e.message);
   }
   if (publicApi) {
     res = new Response(res.body, res);

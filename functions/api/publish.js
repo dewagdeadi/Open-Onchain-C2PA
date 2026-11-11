@@ -14,7 +14,7 @@ export async function onRequestPost({ request, env }) {
   if (!pub) return pages.fail(503, "publishing is not configured (ARWEAVE_JWK)");
 
   const body = await request.json();
-  const maxStore = Number(env.MAX_STORE_BYTES || 102400);
+  const maxStore = Number(env.MAX_STORE_BYTES || (pub.mode === "direct" ? 10485760 : 102400));
   const { op } = pages;
 
   if (body.mode === "statement") {

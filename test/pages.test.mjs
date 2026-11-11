@@ -15,18 +15,20 @@ const require = createRequire(import.meta.url);
 const { DataItem } = require("@dha-team/arbundles");
 const op = require("../index.js");
 const { FakeArweave } = require("./fake-arweave.js");
+const { FakeNode } = require("./fake-node.js");
 
 const rand = () => "0x" + crypto.randomBytes(32).toString("hex");
 const wallet = op.generateArweaveWallet();
 const certPem = fs.readFileSync(new URL("./fixtures/es256-cert.pem", import.meta.url), "utf8");
 const certKey = crypto.createPrivateKey(fs.readFileSync(new URL("./fixtures/es256-key.pem", import.meta.url)));
 
-let ar, ar2, env, bundled;
+let ar, ar2, env, bundled, node;
 beforeEach(() => {
   ar = new FakeArweave();
   ar2 = new FakeArweave();
   ar2.url = "https://fake2.arweave";
   bundled = 0;
+  node = new FakeNode(ar);
   env = { GATEWAYS: ar.url, BUNDLER_URL: "https://fake.bundler", ARWEAVE_JWK: JSON.stringify(wallet.jwk), PUBLISH_TOKEN: "s3cret-token" };
   globalThis.fetch = async (url, init) => {
     if (url.startsWith("https://fake.bundler/v1/tx/arweave")) {
@@ -38,6 +40,7 @@ beforeEach(() => {
       bundled++;
       return new Response(JSON.stringify({ id: item.id, winc: "0" }), { status: 200 });
     }
+    if (url.startsWith(node.url)) return node.fetch(url, init);
     if (url.startsWith(ar2.url)) return ar2.fetch(url, init);
     return ar.fetch(url, init);
   };
@@ -169,4 +172,26 @@ test("publishing is off when secrets are missing", async () => {
   delete env.PUBLISH_TOKEN;
   const r = await call(publish.onRequestPost, { method: "POST", path: "/api/publish", body: {}, token: "x" });
   assert.equal(r.status, 503);
+});
+
+test("direct mode: native Arweave transactions, no bundler", async () => {
+  Object.assign(env, { UPLOAD_MODE: "direct", ARWEAVE_NODE_URL: node.url });
+  const h = await call(health.onRequestGet, { path: "/api/health" });
+  assert.equal(h.body.uploadMode, "direct");
+  const e = entry();
+  const pub = await call(publish.onRequestPost, { method: "POST", path: "/api/publish", body: { mode: "public", entries: [wire(e)] }, token: env.PUBLISH_TOKEN });
+  assert.equal(pub.status, 200);
+  assert.equal(bundled, 0);
+  assert.equal(node.posted.tx, 1);
+  ar.mine();
+  const r = await call(verify.onRequestPost, { method: "POST", path: "/api/verify", body: { manifest: manifestOf(e) } });
+  assert.deepEqual(codes(r), ["anchor.match"]);
+});
+
+test("direct mode respects the cost cap", async () => {
+  Object.assign(env, { UPLOAD_MODE: "direct", ARWEAVE_NODE_URL: node.url, MAX_REWARD_WINSTON: "1000" });
+  const r = await call(publish.onRequestPost, { method: "POST", path: "/api/publish", body: { mode: "public", entries: [wire(entry())] }, token: env.PUBLISH_TOKEN });
+  assert.equal(r.status, 402);
+  assert.match(r.body.error, /cap/);
+  assert.equal(node.posted.tx, 0);
 });

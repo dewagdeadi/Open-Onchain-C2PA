@@ -8,7 +8,8 @@
 //   oprov revoke   --key key.pem [--reason uri]
 //   oprov verify   <manifest.json> [--receipt r.json] [--store file.c2pa] [--signer cert.pem] [--tsa unix]
 //
-// Env: ARWEAVE_WALLET (default wallet.json), TURBO_TOKEN (default arweave),
+// Env: ARWEAVE_WALLET (default wallet.json), UPLOAD_MODE (bundler | direct), ARWEAVE_NODE_URL,
+//      MAX_REWARD_WINSTON (cap per direct upload), TURBO_TOKEN (default arweave),
 //      TURBO_PRIVATE_KEY (for EVM/Solana tokens), ARWEAVE_GATEWAY_URL, TRUSTED_UPLOADERS, DRY_RUN=1
 const fs = require("fs");
 const path = require("path");
@@ -24,6 +25,13 @@ const print = (o) => console.log(JSON.stringify(o, null, 2));
 async function uploader() {
   const env = process.env;
   if (env.DRY_RUN === "1") return op.createUploader({ dryRun: true });
+  if ((env.UPLOAD_MODE || "bundler") === "direct") {
+    return op.createDirectUploader({
+      jwk: readJson(env.ARWEAVE_WALLET || "wallet.json"),
+      node: env.ARWEAVE_NODE_URL || "https://arweave.net",
+      maxRewardWinston: env.MAX_REWARD_WINSTON,
+    });
+  }
   const token = env.TURBO_TOKEN || "arweave";
   const privateKey = token === "arweave" ? readJson(env.ARWEAVE_WALLET || "wallet.json") : env.TURBO_PRIVATE_KEY;
   return op.createUploader({ token, privateKey });
@@ -91,7 +99,7 @@ async function main() {
       break;
     }
     default:
-      console.log(fs.readFileSync(__filename, "utf8").split("\n").slice(1, 13).join("\n").replace(/^\/\/ ?/gm, ""));
+      console.log(fs.readFileSync(__filename, "utf8").split("\n").filter((l) => l.startsWith("//")).join("\n").replace(/^\/\/ ?/gm, ""));
   }
 }
 

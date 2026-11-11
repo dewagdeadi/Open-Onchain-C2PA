@@ -7,10 +7,10 @@ C2PA validation is unchanged: a manifest stays valid with any C2PA validator whe
 | | |
 | --- | --- |
 | Storage and timestamps | Arweave only. Every record is an Arweave data item, mined into an Arweave block |
-| Cost | No gas. Small uploads are free through a bundler's free tier; larger ones are paid once, permanently |
+| Cost | No gas. Bundler mode: small uploads free, larger paid once. Direct mode: paid once in AR per byte, no third party |
 | Signer keys | C2PA ES256 (P-256) keys sign statements directly |
 | Web app | Cloudflare Pages: static UI + Pages Functions API, no Node compatibility flag needed |
-| Tests | `npm test`: 27 tests (protocol, Web Crypto parity with Node/OpenZeppelin/arbundles, Pages handlers) |
+| Tests | `npm test`: 34 tests (protocol, Web Crypto parity with Node/OpenZeppelin/arbundles/arweave-js, direct transactions, Pages handlers) |
 | License | Apache-2.0 |
 
 ## Quick start
@@ -42,11 +42,19 @@ Everything is stored on Arweave and only Arweave. The question is just how an up
 | Route | What it is | Cost | Used here |
 | --- | --- | --- | --- |
 | Bundler (default) | A service that collects many signed data items (ANS-104 format) and posts them to Arweave as one transaction. The data items are signed by your wallet, so the bundler can't change them. | Free under the bundler's size threshold; otherwise paid once in AR, fiat or other tokens | Yes: `BUNDLER_URL`, default [ArDrive Turbo](https://docs.ar.io/build/upload/) |
-| Direct transaction | Post an Arweave transaction yourself to an Arweave node | Always paid in AR, per byte | Not yet |
+| Direct transaction | A native Arweave transaction posted straight to an Arweave node (`/tx`, plus `/chunk` for data over 256 KiB). No third party in the path. | Always paid in AR, per byte, from the wallet's balance | Yes: `UPLOAD_MODE=direct`, node `ARWEAVE_NODE_URL` |
 
 Why a bundler by default: a direct Arweave transaction always costs AR, while a bundler lets small records (most manifest stores, every anchor root and statement) go up for free. Bundling doesn't change trust: each record keeps your wallet's signature and its own Arweave id, and validators read it from Arweave gateways, not from the bundler.
 
 Turbo is only the default. `BUNDLER_URL` accepts any ANS-104 bundler that takes signed data items over HTTP; the data items this project creates are standard and verify with the reference `arbundles` library.
+
+Direct mode removes the bundler entirely. The wallet needs AR: before each upload it reads the price (`/price/<bytes>`) and its balance, refuses uploads above `MAX_REWARD_WINSTON`, then signs and posts the transaction. Transactions are format 2 with chunk proofs, built on Web Crypto and checked against `arweave-js` in the tests. Records are indexed and verified exactly like bundled ones.
+
+```bash
+UPLOAD_MODE=direct MAX_REWARD_WINSTON=100000000000 npx oprov publish batch.json   # CLI, signs with wallet.json
+```
+
+In Cloudflare, set `UPLOAD_MODE = "direct"` and raise `MAX_STORE_BYTES` if you want to accept larger stores.
 
 ## Cloudflare Pages
 
@@ -73,13 +81,16 @@ Or connect the Git repo in the Cloudflare dashboard: no build command, output di
 | Variable | Default | Notes |
 | --- | --- | --- |
 | `GATEWAYS` | `https://arweave.net` | Comma-separated. Add a second, independent gateway: results are compared and disagreement is reported |
-| `BUNDLER_URL` | `https://upload.ardrive.io` | Where signed uploads are sent on their way to Arweave. ArDrive Turbo by default; any compatible ANS-104 bundler works |
+| `UPLOAD_MODE` | `bundler` | `bundler` (free for small records) or `direct` (native Arweave transactions, paid in AR) |
+| `BUNDLER_URL` | `https://upload.ardrive.io` | Bundler mode: where signed uploads are sent on their way to Arweave. ArDrive Turbo by default; any compatible ANS-104 bundler works |
+| `ARWEAVE_NODE_URL` | `https://arweave.net` | Direct mode: the Arweave node or gateway that accepts `/tx` and `/chunk` |
+| `MAX_REWARD_WINSTON` | `100000000000` (0.1 AR) | Direct mode: spending cap per upload; over it, `/api/publish` answers 402 |
 | `MAX_STORE_BYTES` | `102400` | Largest store `/api/publish` accepts. Keep it under the bundler's free size to stay at zero cost |
 | `TRUSTED_UPLOADERS` | empty | Default trusted publisher addresses for `/api/verify` |
 | `ARWEAVE_JWK` (secret) | — | Publisher wallet. Without it, publishing is off and the site is verify-only |
 | `PUBLISH_TOKEN` (secret) | — | Bearer token for `/api/publish` |
 
-Local development: copy `.dev.vars.example` to `.dev.vars`, then `npm run dev`. For an offline run, start `npm run dev:fake-arweave` and set `GATEWAYS` and `BUNDLER_URL` to `http://127.0.0.1:9000` in `.dev.vars`; `curl 127.0.0.1:9000/__mine` mines pending uploads.
+Local development: copy `.dev.vars.example` to `.dev.vars`, then `npm run dev`. For an offline run, start `npm run dev:fake-arweave` (a local gateway, bundler and node that check every signature) and point `GATEWAYS`, `BUNDLER_URL` and `ARWEAVE_NODE_URL` at `http://127.0.0.1:9000` in `.dev.vars`; `curl 127.0.0.1:9000/__mine` mines pending uploads.
 
 The browser never sees the publisher wallet. Producers sign statements offline with their C2PA key (`oprov` or `createStatement`), and the API refuses anything a validator would ignore.
 

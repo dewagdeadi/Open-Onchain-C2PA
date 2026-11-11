@@ -6,8 +6,13 @@ compatibility_date = "2025-09-01"
 [vars]
 # Comma-separated Arweave gateways. Add a second, independent one in production.
 GATEWAYS = "https://arweave.net"
+# How uploads reach Arweave: "bundler" (free for small records) or "direct" (native Arweave transactions, paid in AR).
+UPLOAD_MODE = "bundler"
 BUNDLER_URL = "https://upload.ardrive.io"
-# Largest manifest store accepted by /api/publish (bytes). Keep under Turbo's free size to stay at zero cost.
+ARWEAVE_NODE_URL = "https://arweave.net"
+# Direct mode only: refuse any single upload costing more than this many winston (1 AR = 10^12 winston).
+MAX_REWARD_WINSTON = "100000000000"
+# Largest manifest store accepted by /api/publish (bytes). In bundler mode keep it under the free size; raise it for direct mode.
 MAX_STORE_BYTES = "102400"
 # Optional default trusted publisher addresses for /api/verify (comma-separated).
 TRUSTED_UPLOADERS = ""

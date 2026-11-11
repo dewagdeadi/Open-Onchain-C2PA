@@ -7,5 +7,6 @@ export async function onRequestGet({ env }) {
     gateways: pages.gatewaysFrom(env).map((g) => g.url),
     publishing: Boolean(pub && env.PUBLISH_TOKEN),
     publisher: pub ? await pages.arweaveAddress(pub.jwk) : null,
+    uploadMode: pub ? pub.mode : null,
   });
 }

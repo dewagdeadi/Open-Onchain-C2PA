@@ -7,4 +7,5 @@ module.exports = {
   ...require("./lib/publish"),
   ...require("./lib/verify"),
   ...require("./lib/ans104"),
+  ...require("./lib/arweave-tx"),
 };
