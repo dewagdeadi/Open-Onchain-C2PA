@@ -6,8 +6,8 @@ C2PA validation is unchanged: a manifest stays valid with any C2PA validator whe
 
 | | |
 | --- | --- |
-| Storage and timestamps | Arweave data items, bundled by ArDrive Turbo (ANS-104) |
-| Cost | No gas. Uploads under Turbo's free-size limit cost nothing (they need a signer, not funds); larger ones are paid once |
+| Storage and timestamps | Arweave only. Every record is an Arweave data item, mined into an Arweave block |
+| Cost | No gas. Small uploads are free through a bundler's free tier; larger ones are paid once, permanently |
 | Signer keys | C2PA ES256 (P-256) keys sign statements directly |
 | Web app | Cloudflare Pages: static UI + Pages Functions API, no Node compatibility flag needed |
 | Tests | `npm test`: 27 tests (protocol, Web Crypto parity with Node/OpenZeppelin/arbundles, Pages handlers) |
@@ -35,6 +35,19 @@ DRY_RUN=1 npx oprov publish batch.json              # no network
 
 All hashes are SHA-256: of the `c2pa.claim.v2` CBOR, the `c2pa.signature` box (covers `sigTst2`), the hard-binding value and the DER signer certificate. `manifestId` = sha256 of the URN string.
 
+## How data gets onto Arweave
+
+Everything is stored on Arweave and only Arweave. The question is just how an upload reaches it:
+
+| Route | What it is | Cost | Used here |
+| --- | --- | --- | --- |
+| Bundler (default) | A service that collects many signed data items (ANS-104 format) and posts them to Arweave as one transaction. The data items are signed by your wallet, so the bundler can't change them. | Free under the bundler's size threshold; otherwise paid once in AR, fiat or other tokens | Yes: `BUNDLER_URL`, default [ArDrive Turbo](https://docs.ar.io/build/upload/) |
+| Direct transaction | Post an Arweave transaction yourself to an Arweave node | Always paid in AR, per byte | Not yet |
+
+Why a bundler by default: a direct Arweave transaction always costs AR, while a bundler lets small records (most manifest stores, every anchor root and statement) go up for free. Bundling doesn't change trust: each record keeps your wallet's signature and its own Arweave id, and validators read it from Arweave gateways, not from the bundler.
+
+Turbo is only the default. `BUNDLER_URL` accepts any ANS-104 bundler that takes signed data items over HTTP; the data items this project creates are standard and verify with the reference `arbundles` library.
+
 ## Cloudflare Pages
 
 The repo is a ready Pages project: `public/` is the site (Verify, Lookup, Publish), `functions/api/` is the API. Everything in the request path uses Web Crypto, so it runs on the Workers runtime as-is, including signing ANS-104 data items for upload.
@@ -60,7 +73,7 @@ Or connect the Git repo in the Cloudflare dashboard: no build command, output di
 | Variable | Default | Notes |
 | --- | --- | --- |
 | `GATEWAYS` | `https://arweave.net` | Comma-separated. Add a second, independent gateway: results are compared and disagreement is reported |
-| `BUNDLER_URL` | `https://upload.ardrive.io` | Turbo, or any compatible ANS-104 bundler |
+| `BUNDLER_URL` | `https://upload.ardrive.io` | Where signed uploads are sent on their way to Arweave. ArDrive Turbo by default; any compatible ANS-104 bundler works |
 | `MAX_STORE_BYTES` | `102400` | Largest store `/api/publish` accepts. Keep it under the bundler's free size to stay at zero cost |
 | `TRUSTED_UPLOADERS` | empty | Default trusted publisher addresses for `/api/verify` |
 | `ARWEAVE_JWK` (secret) | — | Publisher wallet. Without it, publishing is off and the site is verify-only |
@@ -127,7 +140,7 @@ Reported separately from, and never changing, the C2PA validation state.
 
 - Anyone can upload anything with any tags. Records are evidence only after the validator checks hashes, signatures and, ideally, the uploader address (`TRUSTED_UPLOADERS`).
 - Read through two independent gateways and compare; one gateway alone is a single point of trust.
-- Turbo makes data readable immediately, but the timestamp proof exists once its bundle is mined.
-- Turbo's free tier is Turbo's policy, not an Arweave rule. Budget for paid uploads of larger stores.
+- A bundler makes data readable immediately, but the timestamp proof exists once its bundle is mined into an Arweave block.
+- A bundler's free tier is that bundler's policy, not an Arweave rule. Budget for paid uploads of larger stores.
 - The uploader wallet signs data items; keep it separate from C2PA signing keys.
 - `/api/publish` uses one shared wallet and one token. For several producers, put Cloudflare Access in front of it or issue per-producer deployments.
