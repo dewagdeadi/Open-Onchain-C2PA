@@ -8,5 +8,6 @@ export async function onRequestGet({ env }) {
     publishing: Boolean(pub && env.PUBLISH_TOKEN),
     publisher: pub ? await pages.arweaveAddress(pub.jwk) : null,
     uploadMode: pub ? pub.mode : null,
+    maxStoreBytes: pub ? Number(env.MAX_STORE_BYTES || (pub.mode === "direct" ? 10485760 : 102400)) : null,
   });
 }

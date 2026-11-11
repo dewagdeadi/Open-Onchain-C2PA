@@ -1,6 +1,6 @@
 // POST /api/verify
 // { manifest: { urn | manifestId, claimHash, signatureHash, bindingHash, signerCertHash, parents? },
-//   receipt?, storeBase64?, signerCertPem? | signerKey?: {x,y}, tsaTime?, trustedUploaders? }
+//   receipt?, storeSha256? | storeBase64?, signerCertPem? | signerKey?: {x,y}, tsaTime?, trustedUploaders? }
 import pages from "../../lib/pages.js";
 
 const HASH = /^0x[0-9a-f]{64}$/i;
@@ -18,8 +18,16 @@ export async function onRequestPost({ request, env }) {
     storeBytes = pages.b64ToBytes(body.storeBase64);
     if (storeBytes.length > MAX_STORE) return pages.fail(413, "store too large");
   }
+  if (body.storeSha256 && !HASH.test(body.storeSha256)) return pages.fail(400, "storeSha256 must be a 0x-prefixed SHA-256");
   let signerKey = body.signerKey;
-  if (!signerKey && body.signerCertPem) signerKey = pages.op.p256FromPem(body.signerCertPem);
+  let signerNote = null;
+  if (!signerKey && body.signerCertPem) {
+    try {
+      signerKey = pages.op.p256FromPem(body.signerCertPem);
+    } catch {
+      signerNote = { code: "org.openprovenance.signer.unsupported", severity: "info", detail: "status records exist only for ES256 (P-256) signers" };
+    }
+  }
 
   const trusted = body.trustedUploaders?.length ? body.trustedUploaders : pages.list(env.TRUSTED_UPLOADERS);
   const result = await pages.op.verifyAcrossGateways({
@@ -27,9 +35,11 @@ export async function onRequestPost({ request, env }) {
     manifest: m,
     receipt: body.receipt,
     storeBytes,
+    storeSha256: body.storeSha256,
     signerKey,
     tsaTime: body.tsaTime ? Number(body.tsaTime) : undefined,
     trustedUploaders: trusted.length ? trusted : undefined,
   });
+  if (signerNote) result.codes.push(signerNote);
   return pages.json(result);
 }

@@ -10,30 +10,38 @@ C2PA validation is unchanged: a manifest stays valid with any C2PA validator whe
 | Cost | No gas. Bundler mode: small uploads free, larger paid once. Direct mode: paid once in AR per byte, no third party |
 | Signer keys | C2PA ES256 (P-256) keys sign statements directly |
 | Web app | Cloudflare Pages: static UI + Pages Functions API, no Node compatibility flag needed |
-| Tests | `npm test`: 34 tests (protocol, Web Crypto parity with Node/OpenZeppelin/arbundles/arweave-js, direct transactions, Pages handlers) |
+| Tests | `npm test`: 40 tests (protocol, Web Crypto parity with Node/OpenZeppelin/arbundles/arweave-js, direct transactions, the in-browser C2PA reader on real C2PA files, Pages handlers) |
 | License | Apache-2.0 |
 
 ## Screenshots
 
-The Cloudflare Pages app, running against a local Arweave simulator (`npm run dev:fake-arweave`). Ids, hashes and dates are test data.
+The Cloudflare Pages app, built for people who have never used crypto. You drop a photo; your browser reads its Content Credentials on your device and sends only fingerprints. Shown with the C2PA SDK's public test images, against a local Arweave simulator.
 
-**Verify:** a manifest checked against Arweave. The result is extra evidence and never replaces the C2PA validation result.
+**Check a file.** Who signed it, and whether its credentials match the permanent public record.
 
-![Verify page: manifest form and an "Anchored on Arweave" result with the record, block and uploader](docs/screenshots/verify-anchored.png)
+![Check page: a dropped photo with its signer and app, and a green "Recorded in the public archive" result with the date](docs/screenshots/check-recorded.png)
 
-**Warnings:** the same check with the signer's certificate added. Here the author has withdrawn the manifest with a signed statement.
+**When the publisher has withdrawn it.** The record still matches, with a clear warning.
 
-![Result showing "Anchored, with warnings": anchored on Arweave and withdrawn by the author, plus the signer status log](docs/screenshots/verify-withdrawn.png)
+![Result card: recorded, with a warning that the publisher withdrew these Content Credentials](docs/screenshots/check-withdrawn.png)
 
-**Lookup:** recovering manifest stores from a watermark value, using Arweave tags as the index.
+**Not recorded, or no credentials.** Plain explanations instead of error codes.
 
-![Lookup page: search by watermark returning two manifest-store records with block and uploader](docs/screenshots/lookup.png)
+![Result: "Not in the public archive", explaining that this doesn't mean the file is fake](docs/screenshots/check-not-found.png)
 
-**Publish:** a producer uploads a batch in public mode and downloads the receipts.
+![Result: "No Content Credentials", with suggestions to try the original file or search by watermark](docs/screenshots/check-no-credentials.png)
 
-![Publish page: batch.json and store files selected, public mode, and a table of three published manifests with their Arweave records](docs/screenshots/publish.png)
+**For publishers.** Drop signed photos, pick public record or proof only, enter the access code. Files without credentials, or too large for a public record, are flagged before anything is sent.
 
-<img src="docs/screenshots/mobile-verify.png" alt="Verify result on a phone-width screen" width="300">
+![Publish page: three files listed as ready or can't record, the two recording options, a preview-image notice and the access code](docs/screenshots/publish-ready.png)
+
+**How it works,** in plain language, with answers to common questions (no wallet needed, the photo is never uploaded, what "recorded" does and doesn't prove).
+
+![How it works page: three steps and a list of questions](docs/screenshots/how-it-works.png)
+
+<img src="docs/screenshots/mobile-check.png" alt="The check result on a phone" width="300">
+
+The reader in `public/js/c2pa-reader.mjs` handles JPEG, PNG and `.c2pa` files with no dependencies. Tests check it against the `c2pa-ts` library on the C2PA SDK's sample files. Fingerprints, ids and the full API response stay one click away under "Technical details".
 
 ## Quick start
 
@@ -96,7 +104,7 @@ Or connect the Git repo in the Cloudflare dashboard: no build command, output di
 | Endpoint | Auth | Purpose |
 | --- | --- | --- |
 | `GET /api/health` | none | Protocol, gateways, publisher address |
-| `POST /api/verify` | none, CORS on | `{ manifest, receipt?, storeBase64?, signerCertPem?, tsaTime?, trustedUploaders? }` → result codes, checked across every gateway in `GATEWAYS` |
+| `POST /api/verify` | none, CORS on | `{ manifest, receipt?, storeSha256? or storeBase64?, signerCertPem?, tsaTime?, trustedUploaders? }` → result codes, checked across every gateway in `GATEWAYS` |
 | `GET /api/find?by=urn\|manifest\|softbinding\|root&value=…[&alg=…]` | none, CORS on | Tag lookup on Arweave |
 | `POST /api/publish` | `Authorization: Bearer <PUBLISH_TOKEN>` | `mode: "public"` (stores, base64), `"private"` (hash root) or `"statement"` (pre-signed with the C2PA key; delegate-posted statements must come from the delegate's own wallet) |
 

@@ -195,3 +195,21 @@ test("direct mode respects the cost cap", async () => {
   assert.match(r.body.error, /cap/);
   assert.equal(node.posted.tx, 0);
 });
+
+test("checking from a real photo: fingerprints only, older labels, non-ES256 signer", async () => {
+  const { readFile } = await import("../public/js/c2pa-reader.mjs");
+  const limited = await call(health.onRequestGet, { path: "/api/health" });
+  assert.equal(limited.body.maxStoreBytes, 102400);
+  env.MAX_STORE_BYTES = "1048576";
+  const { store, manifest: m } = await readFile(new Uint8Array(fs.readFileSync(new URL("./fixtures/c2pa/CA.jpg", import.meta.url))));
+  const entry = { urn: m.urn, claimHash: m.claimHash, signatureHash: m.signatureHash, bindingHash: m.bindingHash, signerCertHash: m.signerCertHash };
+  const pub = await call(publish.onRequestPost, { method: "POST", path: "/api/publish", token: env.PUBLISH_TOKEN, body: { mode: "public", entries: [{ ...entry, storeBase64: Buffer.from(store).toString("base64") }] } });
+  assert.equal(pub.status, 200);
+  ar.mine();
+  const r = await call(verify.onRequestPost, { method: "POST", path: "/api/verify", body: { manifest: entry, storeSha256: m.storeSha256, signerCertPem: m.certificatePem } });
+  assert.deepEqual(codes(r), ["anchor.match", "signer.unsupported"]);
+  const wrongStore = await call(verify.onRequestPost, { method: "POST", path: "/api/verify", body: { manifest: entry, storeSha256: rand() } });
+  assert.deepEqual(codes(wrongStore), ["anchor.missing"]);
+  const byStore = await call(find.onRequestGet, { path: `/api/find?by=store&value=${m.storeSha256}` });
+  assert.equal(byStore.body.results.length, 1);
+});

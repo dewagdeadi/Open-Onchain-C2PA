@@ -1,4 +1,4 @@
-// GET /api/find?by=urn|manifest|softbinding|root&value=...[&alg=...][&owners=a,b]
+// GET /api/find?by=urn|manifest|store|softbinding|root&value=...[&alg=...][&owners=a,b]
 import pages from "../../lib/pages.js";
 
 export async function onRequestGet({ request, env }) {
@@ -11,12 +11,13 @@ export async function onRequestGet({ request, env }) {
   let type, tag, tagValue;
   if (by === "urn") [type, tag, tagValue] = [op.Type.STORE, "C2PA-Manifest-Id", await op.manifestIdWeb(value)];
   else if (by === "manifest") [type, tag, tagValue] = [op.Type.STORE, "C2PA-Manifest-Id", value];
+  else if (by === "store") [type, tag, tagValue] = [op.Type.STORE, "Store-SHA256", value.toLowerCase()];
   else if (by === "softbinding") {
     const alg = q.get("alg");
     if (!alg) return pages.fail(400, "missing alg");
     [type, tag, tagValue] = [op.Type.STORE, "Soft-Binding-Key", await op.softBindingKey(alg, value)];
   } else if (by === "root") [type, tag, tagValue] = [op.Type.ROOT, "Merkle-Root", value];
-  else return pages.fail(400, "by must be urn, manifest, softbinding or root");
+  else return pages.fail(400, "by must be urn, manifest, store, softbinding or root");
 
   const [gateway] = pages.gatewaysFrom(env);
   const hits = await gateway.byTag(type, tag, tagValue, owners.length ? owners : undefined);
