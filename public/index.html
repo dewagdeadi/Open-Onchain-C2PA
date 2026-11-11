@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Open Provenance — verify Content Credentials on Arweave</title>
+<meta name="description" content="Check C2PA Content Credentials against permanent, gas-free records on Arweave.">
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<header class="bar">
+  <div class="wrap bar-inner">
+    <a class="brand" href="/">
+      <svg width="28" height="28" viewBox="0 0 28 28" fill="none" aria-hidden="true"><rect x="1" y="1" width="26" height="26" rx="7" stroke="#2B50D8" stroke-width="2"/><path d="M8 14.5l4 4 8-9" stroke="#2B50D8" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span>Open Provenance</span>
+    </a>
+    <nav class="tabs" aria-label="Main">
+      <a href="#verify" data-tab="verify">Verify</a>
+      <a href="#lookup" data-tab="lookup">Lookup</a>
+      <a href="#publish" data-tab="publish">Publish</a>
+    </nav>
+    <span class="muted small" id="net">Arweave · no wallet needed to verify</span>
+  </div>
+</header>
+
+<main class="wrap">
+
+<section id="verify" class="panel" hidden>
+  <h1>Check a manifest against Arweave</h1>
+  <p class="lead">Run normal C2PA validation first. This page adds the Arweave evidence: when the manifest existed, whether it changed, and whether its signer revoked it.</p>
+  <form id="verify-form" class="grid2">
+    <fieldset class="card">
+      <legend>Manifest</legend>
+      <label>Manifest URN<input name="urn" placeholder="urn:c2pa:3fa85f64-5717-4562-b3fc-2c963f66afa6" required></label>
+      <label>Claim hash<input name="claimHash" placeholder="0x… (sha256)" required pattern="0x[0-9a-fA-F]{64}"></label>
+      <label>Signature hash<input name="signatureHash" placeholder="0x…" required pattern="0x[0-9a-fA-F]{64}"></label>
+      <label>Binding hash<input name="bindingHash" placeholder="0x…" required pattern="0x[0-9a-fA-F]{64}"></label>
+      <label>Signer certificate hash<input name="signerCertHash" placeholder="0x…" required pattern="0x[0-9a-fA-F]{64}"></label>
+      <label class="file">Or load manifest.json<input type="file" id="manifest-file" accept=".json,application/json"></label>
+    </fieldset>
+    <fieldset class="card">
+      <legend>Optional checks</legend>
+      <label class="file">Receipt (private mode)<input type="file" id="receipt-file" accept=".json,application/json"></label>
+      <label class="file">Manifest store (.c2pa), for an exact-bytes match<input type="file" id="store-file"></label>
+      <label>Signer certificate (PEM), to check revocation and withdrawal<textarea name="signerCertPem" rows="4" placeholder="-----BEGIN CERTIFICATE-----"></textarea></label>
+      <label>TSA time (unix seconds)<input name="tsaTime" inputmode="numeric" placeholder="from sigTst2"></label>
+      <label>Trusted publishers (Arweave addresses, comma separated)<input name="trusted" placeholder="optional"></label>
+    </fieldset>
+    <div class="actions"><button type="submit" class="primary">Check on Arweave</button></div>
+  </form>
+  <div id="verify-out" aria-live="polite"></div>
+</section>
+
+<section id="lookup" class="panel" hidden>
+  <h1>Find records on Arweave</h1>
+  <p class="lead">Look up a manifest store by URN, recover one from a watermark, or find a batch root. Results are leads: verify before you trust them.</p>
+  <form id="lookup-form" class="card row">
+    <label>Search by
+      <select name="by">
+        <option value="urn">Manifest URN</option>
+        <option value="manifest">Manifest id (sha256)</option>
+        <option value="softbinding">Watermark / fingerprint</option>
+        <option value="root">Merkle root</option>
+      </select>
+    </label>
+    <label class="grow">Value<input name="value" required placeholder="urn:c2pa:…"></label>
+    <label id="alg-wrap" hidden>Algorithm<input name="alg" placeholder="com.example.watermark.1"></label>
+    <button type="submit" class="primary">Search</button>
+  </form>
+  <div id="lookup-out" aria-live="polite"></div>
+</section>
+
+<section id="publish" class="panel" hidden>
+  <h1>Publish to Arweave</h1>
+  <p class="lead">For producers. Uploads are signed by this site's Arweave wallet and cost no gas. Public mode stores the manifest permanently; private mode stores only a hash root.</p>
+  <form id="publish-form" class="grid2">
+    <fieldset class="card">
+      <legend>Batch</legend>
+      <label class="file">batch.json<input type="file" id="batch-file" accept=".json,application/json" required></label>
+      <label class="file">Manifest store files named in batch.json (public mode)<input type="file" id="store-files" multiple></label>
+      <fieldset class="radios">
+        <legend>Mode</legend>
+        <label class="radio"><input type="radio" name="mode" value="public" checked><span><b>Public</b><span class="muted small">Upload each store. Permanent and findable; free when small.</span></span></label>
+        <label class="radio"><input type="radio" name="mode" value="private"><span><b>Private</b><span class="muted small">Hashes only, one tiny upload per batch.</span></span></label>
+      </fieldset>
+    </fieldset>
+    <fieldset class="card">
+      <legend>Access</legend>
+      <label>Publish token<input type="password" name="token" autocomplete="off" required></label>
+      <p class="muted small">Kept in this tab's memory only. Ask the site operator for a token.</p>
+      <div class="note warn small">Public mode is permanent: nothing uploaded to Arweave can be deleted. Use private mode for sensitive work.</div>
+    </fieldset>
+    <div class="actions"><button type="submit" class="primary">Publish</button></div>
+  </form>
+  <div id="publish-out" aria-live="polite"></div>
+</section>
+
+</main>
+
+<footer class="wrap muted small foot">
+  Protocol <code>openprovenance/1</code> · Arweave evidence never changes the C2PA validation result. It shows who signed and when, not that the content is true.
+</footer>
+<script src="/app.js" type="module"></script>
+</body>
+</html>

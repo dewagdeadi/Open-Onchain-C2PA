@@ -1,0 +1,33 @@
+{
+  "name": "openprovenance-arweave",
+  "version": "1.0.0",
+  "description": "Gas-free Arweave anchors, index and status log for C2PA 2.5 Content Credentials, with a Cloudflare Pages app",
+  "main": "index.js",
+  "directories": {
+    "lib": "lib",
+    "test": "test"
+  },
+  "scripts": {
+    "test": "node --test --test-reporter=spec test/protocol.test.js test/web.test.js test/pages.test.mjs",
+    "dev": "wrangler pages dev public",
+    "dev:fake-arweave": "node scripts/dev-fake-arweave.js",
+    "build": "wrangler pages functions build --outdir .wrangler/functions-check",
+    "deploy": "wrangler pages deploy public"
+  },
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@ardrive/turbo-sdk": "^2.2.0",
+    "@openzeppelin/merkle-tree": "^1.0.8",
+    "ethereum-cryptography": "^3.2.0"
+  },
+  "bin": {
+    "oprov": "scripts/cli.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "@dha-team/arbundles": "^1.2.0",
+    "wrangler": "^4.160.0"
+  }
+}

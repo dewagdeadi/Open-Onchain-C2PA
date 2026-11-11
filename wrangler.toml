@@ -1,0 +1,17 @@
+# Cloudflare Pages project: static UI in /public, API in /functions.
+name = "openprovenance"
+pages_build_output_dir = "public"
+compatibility_date = "2025-09-01"
+
+[vars]
+# Comma-separated Arweave gateways. Add a second, independent one in production.
+GATEWAYS = "https://arweave.net"
+BUNDLER_URL = "https://upload.ardrive.io"
+# Largest manifest store accepted by /api/publish (bytes). Keep under Turbo's free size to stay at zero cost.
+MAX_STORE_BYTES = "102400"
+# Optional default trusted publisher addresses for /api/verify (comma-separated).
+TRUSTED_UPLOADERS = ""
+
+# Secrets (never in this file):
+#   npx wrangler pages secret put ARWEAVE_JWK     # contents of wallet.json
+#   npx wrangler pages secret put PUBLISH_TOKEN   # long random string
