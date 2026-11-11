@@ -105,7 +105,7 @@ Or connect the Git repo in the Cloudflare dashboard: no build command, output di
 | --- | --- | --- |
 | `GET /api/health` | none | Protocol, gateways, publisher address |
 | `POST /api/verify` | none, CORS on | `{ manifest, receipt?, storeSha256? or storeBase64?, signerCertPem?, tsaTime?, trustedUploaders? }` → result codes, checked across every gateway in `GATEWAYS` |
-| `GET /api/find?by=urn\|manifest\|softbinding\|root&value=…[&alg=…]` | none, CORS on | Tag lookup on Arweave |
+| `GET /api/find?by=urn\|manifest\|store\|softbinding\|root&value=…[&alg=…]` | none, CORS on | Tag lookup on Arweave |
 | `POST /api/publish` | `Authorization: Bearer <PUBLISH_TOKEN>` | `mode: "public"` (stores, base64), `"private"` (hash root) or `"statement"` (pre-signed with the C2PA key; delegate-posted statements must come from the delegate's own wallet) |
 
 | Variable | Default | Notes |
