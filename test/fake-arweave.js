@@ -3,7 +3,7 @@ class FakeArweave {
   constructor() {
     this.items = new Map();
     this.height = 1000;
-    this.time = 1_760_000_000;
+    this.time = Math.floor(Date.now() / 1000) - 3600;
     this.url = "https://fake.arweave";
     this.fetch = this.fetch.bind(this);
   }

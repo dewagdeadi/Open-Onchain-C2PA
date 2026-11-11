@@ -13,6 +13,28 @@ C2PA validation is unchanged: a manifest stays valid with any C2PA validator whe
 | Tests | `npm test`: 34 tests (protocol, Web Crypto parity with Node/OpenZeppelin/arbundles/arweave-js, direct transactions, Pages handlers) |
 | License | Apache-2.0 |
 
+## Screenshots
+
+The Cloudflare Pages app, running against a local Arweave simulator (`npm run dev:fake-arweave`). Ids, hashes and dates are test data.
+
+**Verify:** a manifest checked against Arweave. The result is extra evidence and never replaces the C2PA validation result.
+
+![Verify page: manifest form and an "Anchored on Arweave" result with the record, block and uploader](docs/screenshots/verify-anchored.png)
+
+**Warnings:** the same check with the signer's certificate added. Here the author has withdrawn the manifest with a signed statement.
+
+![Result showing "Anchored, with warnings": anchored on Arweave and withdrawn by the author, plus the signer status log](docs/screenshots/verify-withdrawn.png)
+
+**Lookup:** recovering manifest stores from a watermark value, using Arweave tags as the index.
+
+![Lookup page: search by watermark returning two manifest-store records with block and uploader](docs/screenshots/lookup.png)
+
+**Publish:** a producer uploads a batch in public mode and downloads the receipts.
+
+![Publish page: batch.json and store files selected, public mode, and a table of three published manifests with their Arweave records](docs/screenshots/publish.png)
+
+<img src="docs/screenshots/mobile-verify.png" alt="Verify result on a phone-width screen" width="300">
+
 ## Quick start
 
 ```bash
